@@ -1,112 +1,106 @@
 # PixelPitch — Higgsfield Image Generation Agent
 
-Reusable automation that generates images on [higgsfield.ai](https://higgsfield.ai/ai/image)
-by reading prompts from a Markdown file and driving Chrome.
+Generates images on [higgsfield.ai](https://higgsfield.ai/ai/image) from prompts in
+Markdown files. It sets the **model**, **quality**, **aspect ratio**, and **Unlimited**
+toggle, then types each prompt and generates.
 
-The agent (named **PixelPitch** by default) automatically sets the **model**,
-**quality**, **aspect ratio**, and **Unlimited** toggle before generating each prompt.
+There are **two modes**:
+
+| Mode | Runs in background? | Steals keyboard? | How |
+|------|--------------------|------------------|-----|
+| **CDP (recommended)** | ✅ Yes | ❌ No | Drives a dedicated debug Chrome via DevTools Protocol with *trusted* input |
+| Keystroke (legacy) | ❌ No | ✅ Yes | Uses System Events keystrokes in your main Chrome |
+
+> **Why CDP?** The prompt box is a *Lexical* editor that only accepts trusted input.
+> Synthetic JS events can't clear it; OS keystrokes work but take over your keyboard.
+> Chrome's DevTools Protocol sends *trusted* events to a **background** tab, so the
+> agent runs fully in the background while you keep working.
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `higgsfield_agent.sh` | The reusable agent script |
-| `image_prompts.md` | Your prompts (edit this) |
+| `run_batch.sh` | One-command runner (CDP, foreground or background) |
+| `cdp_agent.js` | The CDP agent (Node) |
+| `start_chrome_debug.sh` | Launches the dedicated debug Chrome |
+| `batches/batch_1.md`, `batch_2.md`, … | **One MD file per batch of 8 prompts** |
+| `higgsfield_agent.sh` | Legacy keystroke agent (foreground only) |
 
 ## One-Time Setup
 
-1. **Open Chrome** with a tab on `https://higgsfield.ai/ai/image` and **log in**.
-2. Enable AppleScript control:
-   **Chrome menu → View → Developer → "Allow JavaScript from Apple Events"** (checked ✓)
-3. Grant Accessibility permission to your terminal:
-   **System Settings → Privacy & Security → Accessibility** → enable Terminal (or iTerm).
+1. **Node 22+** is required (built-in WebSocket). The runner auto-picks it from nvm.
+2. First run launches a **dedicated debug Chrome** (separate profile in
+   `~/.chrome-pixelpitch`) — your **main Chrome and its tabs are never touched**.
+3. In that debug window, **log into Higgsfield once** and leave it open.
 
-> The agent sets model / quality / aspect / Unlimited for you — you no longer
-> need to configure them on the page by hand.
-
-## Configuration
-
-Edit the **CONFIG block** near the top of `higgsfield_agent.sh`, or pass values as
-environment variables:
-
-| Setting | Default | Values | Env var |
-|---------|---------|--------|---------|
-| Agent name | `PixelPitch` | any | `AGENT_NAME` |
-| Model | `Nano Banana Pro` | any model name shown on the site | `MODEL` |
-| Quality | `1K` | `1K`, `2K`, `4K` | `QUALITY` |
-| Aspect ratio | `9:16` | e.g. `9:16`, `16:9`, `1:1` | `ASPECT` |
-| Unlimited | `on` | `on`, `off` | `UNLIMITED` |
-
-Example — generate 4K square images with a different model:
-
-```bash
-MODEL="GPT Image 2" QUALITY=4K ASPECT=1:1 ./higgsfield_agent.sh image_prompts.md 1
-```
+That's it. No Chrome menu flags, no Accessibility permission needed for CDP mode.
 
 ## Usage
 
 ```bash
 cd /Users/vishal/Documents/Claude/cowork/cricket
 
-# Run Batch 1 (prompts 1-8) from image_prompts.md
-./higgsfield_agent.sh
+# Run one batch in the foreground (you watch the log)
+./run_batch.sh batches/batch_1.md
 
-# Run Batch 2 (prompts 9-16)
-./higgsfield_agent.sh image_prompts.md 2
-
-# Run ALL prompts with a 60s wait between each
-./higgsfield_agent.sh image_prompts.md all 60
-
-# Use a different prompts file
-./higgsfield_agent.sh my_other_prompts.md 1
+# Run one batch fully in the BACKGROUND (keep working!)
+./run_batch.sh batches/batch_2.md --bg
+#   -> logs to batches/batch_2.log ; watch with: tail -f batches/batch_2.log
 ```
 
-### Arguments
-
+**One MD file = one batch.** To run the next 8, just point at the next file:
+```bash
+./run_batch.sh batches/batch_1.md --bg   # first 8
+./run_batch.sh batches/batch_2.md --bg   # next 8
 ```
-./higgsfield_agent.sh [PROMPTS_FILE] [BATCH] [WAIT_SECONDS]
-```
 
-- **PROMPTS_FILE** — path to the `.md` file (default: `image_prompts.md`)
-- **BATCH** — `1`, `2`, … (8 prompts each) or `all` (default: `1`)
-- **WAIT_SECONDS** — wait after each generation (default: `50`)
+## Configuration
+
+Set via environment variables (or edit defaults in `run_batch.sh`):
+
+| Setting | Default | Values | Env var |
+|---------|---------|--------|---------|
+| Model | `Nano Banana Pro` | any model on the site | `MODEL` |
+| Quality | `2K` | `1K`, `2K`, `4K` | `QUALITY` |
+| Aspect ratio | `9:16` | `9:16`, `16:9`, `1:1`, … | `ASPECT` |
+| Unlimited | `on` | `on`, `off` | `UNLIMITED` |
+| Wait per image | `50` | seconds | `WAIT` |
+| Agent name | `PixelPitch` | any | `AGENT_NAME` |
+
+```bash
+# 4K square images, next batch, background
+MODEL="Nano Banana Pro" QUALITY=4K ASPECT=1:1 ./run_batch.sh batches/batch_2.md --bg
+```
 
 ## Prompt File Format
 
-Just a numbered list. Headings are ignored — only `N. ` lines are read.
+A numbered list, one prompt per line. Headings are ignored.
 
 ```markdown
-# My Prompts
-
-## Batch 1
-1. First prompt text, descriptive, photorealistic
-2. Second prompt text, cinematic lighting
-
-## Batch 2
-9. Ninth prompt text...
+# Batch 1 (9:16)
+1. First prompt, descriptive, photorealistic
+2. Second prompt, cinematic lighting
+...
+8. Eighth prompt
 ```
 
-> Tip: Keep each prompt on a **single line**. Multi-line prompts are not parsed.
+## How CDP Mode Works
 
-## How It Works
-
-1. Finds the open Chrome tab matching `higgsfield.ai/ai/image`.
-2. Applies settings once per run: selects the **model** (from the model dialog),
-   **quality** and **aspect ratio** (`button[role=option]` dropdowns), and ensures
-   the **Unlimited** switch matches your config.
-3. For each prompt: focuses the prompt box (a Lexical rich-text editor) and types
-   using **System Events keystrokes** — required because the editor ignores
-   programmatic DOM changes; it only reacts to real keyboard input.
-4. Clicks the **Unlimited** generate button.
-5. Waits, then repeats for the next prompt.
+1. `start_chrome_debug.sh` launches Chrome with `--remote-debugging-port=9222` and a
+   dedicated profile (Chrome 136+ blocks debugging on the default profile).
+2. `cdp_agent.js` connects to the Higgsfield tab over the DevTools WebSocket.
+3. Applies settings via `Runtime.evaluate` (button clicks).
+4. Per prompt: focuses the editor, sends **trusted** `Cmd+A` + `Backspace` to clear,
+   then `Input.insertText` to type — Lexical accepts these because they're trusted.
+5. Clicks generate, waits, repeats. All against a **background** tab.
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
-| `"Prompt is required"` on page | Editor didn't receive keystrokes → check Accessibility permission |
-| `NO_TAB` error | Open a Chrome tab on higgsfield.ai/ai/image |
-| `osascript not allowed to send keystrokes` | Grant Accessibility permission to your terminal |
-| JS execution error | Enable "Allow JavaScript from Apple Events" in Chrome |
-| Images cut off / incomplete | Increase `WAIT_SECONDS` (e.g. 60–90) |
-| `NOT_FOUND` for model/quality/aspect | The name must match the site exactly (e.g. `2K`, not `2k`); the model name must match the label in the model picker |
+| `Cannot reach Chrome debug port` | Run `./start_chrome_debug.sh` (or just use `run_batch.sh`, which does it) |
+| Debug window asks to log in | Log into Higgsfield once in the debug Chrome window |
+| `No Chrome tab on …/ai/image` | Open `higgsfield.ai/ai/image` in the debug window |
+| `NOT_FOUND` for quality/aspect | Value must match exactly (`2K` not `2k`; `9:16` not `9-16`) |
+| Images incomplete | Increase `WAIT` (e.g. `WAIT=70`) |
+| Node error about WebSocket | Ensure Node 22+ is installed (nvm) |
