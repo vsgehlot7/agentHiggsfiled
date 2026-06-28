@@ -22,7 +22,8 @@ by reading prompts from a Markdown file and driving Chrome.
 ## Usage
 
 ```bash
-cd /Users/vishal/Documents/Claude/cowork/cricket
+git clone https://github.com/vsgehlot7/agentHiggsfiled.git
+cd agentHiggsfiled
 
 # Run Batch 1 (prompts 1-8) from image_prompts.md
 ./higgsfield_agent.sh
@@ -82,4 +83,3 @@ Just a numbered list. Headings are ignored — only `N. ` lines are read.
 | `osascript not allowed to send keystrokes` | Grant Accessibility permission to your terminal |
 | JS execution error | Enable "Allow JavaScript from Apple Events" in Chrome |
 | Images cut off / incomplete | Increase `WAIT_SECONDS` (e.g. 60–90) |
-# agentHiggsfiled
